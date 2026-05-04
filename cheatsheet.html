@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linux Namespaces // Cheatsheet</title>
+<meta name="description" content="One-page Linux namespaces cheatsheet. The eight types, syscalls, unshare, nsenter, ip netns, /proc layout, and the nsm CLI.">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&display=swap');
+:root {
+  --bg:#F2F1EE; --surface:#FFFFFF; --surface2:#C8C7C1; --border:#1A1A1A; --border2:#D0CFC8;
+  --orange:#E85000; --cyan:#007870; --yellow:#906500; --red:#BF1020; --green:#287A38;
+  --dim:#8A8A8A; --dim2:#AAAAAA; --text:#3A3A3A; --bright:#0D0D0D;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: var(--bg); color: var(--text); font-family: 'Space Mono', monospace; font-size: 10px; line-height: 1.4; }
+
+.head { border-top: 4px solid var(--orange); border-bottom: 1px solid var(--border); background: var(--surface); padding: 10px 18px; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.head h1 { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 4px; color: var(--bright); line-height: 1; }
+.head h1 em { color: var(--orange); font-style: normal; }
+.head .sub { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
+.head .sub span { color: var(--cyan); }
+.head .meta { font-size: 9px; letter-spacing: 1px; color: var(--dim2); }
+.head .meta a { color: var(--orange); text-decoration: none; border-bottom: 1px dotted var(--orange); }
+
+.sheet { max-width: 1280px; margin: 0 auto; padding: 10px 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+.card { background: var(--surface); border: 1px solid var(--border2); border-left: 3px solid var(--orange); padding: 8px 10px; }
+.card.cy { border-left-color: var(--cyan); }
+.card.yl { border-left-color: var(--yellow); }
+.card.rd { border-left-color: var(--red); }
+.card.gn { border-left-color: var(--green); }
+
+.card h2 { font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; color: var(--bright); line-height: 1; margin-bottom: 4px; }
+.card h2 em { font-style: normal; color: var(--orange); }
+.card.cy h2 em { color: var(--cyan); }
+.card.yl h2 em { color: var(--yellow); }
+.card.rd h2 em { color: var(--red); }
+.card .sub { font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 5px; }
+
+.card p { font-size: 10px; line-height: 1.45; margin: 3px 0; color: var(--text); }
+.card p strong { color: var(--bright); }
+
+table { width: 100%; border-collapse: collapse; font-size: 9px; margin: 3px 0; }
+th { text-align: left; padding: 2px 4px; background: var(--surface2); border: 1px solid var(--dim2); font-family: 'Bebas Neue', sans-serif; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 400; }
+td { padding: 2px 4px; border: 1px solid var(--border2); vertical-align: top; }
+td.k { color: var(--orange); font-weight: 700; }
+td.f { color: var(--cyan); font-family: inherit; }
+td.y { color: var(--yellow); }
+
+pre { background: #1A1918; border: 1px solid #2E2D2A; border-left: 2px solid var(--orange); padding: 5px 7px; margin: 4px 0; font-size: 9.5px; line-height: 1.45; color: #CCCBC4; overflow-x: auto; white-space: pre; }
+pre.cy { border-left-color: var(--cyan); }
+pre.yl { border-left-color: var(--yellow); }
+pre.rd { border-left-color: var(--red); }
+pre.gn { border-left-color: var(--green); }
+pre .kw { color: #F09030; }
+pre .cm { color: #5A5952; font-style: italic; }
+pre .key { color: #3AB8AC; }
+pre .num { color: #E0B060; }
+pre .out { color: #7A7870; }
+pre .str { color: #C8A030; }
+
+code { background: var(--surface2); padding: 0 3px; font-size: 9.5px; color: var(--bright); border-radius: 1px; }
+
+ul.bul { list-style: none; padding: 0; margin: 3px 0; font-size: 9.5px; }
+ul.bul li { padding: 1px 0 1px 12px; position: relative; line-height: 1.4; }
+ul.bul li::before { content: ">"; position: absolute; left: 2px; color: var(--orange); font-weight: 700; }
+ul.bul li strong { color: var(--bright); }
+.card.cy ul.bul li::before { color: var(--cyan); }
+.card.yl ul.bul li::before { color: var(--yellow); }
+
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 8px; font-size: 9.5px; margin: 3px 0; }
+.kv .k { color: var(--orange); font-weight: 700; }
+.card.cy .kv .k { color: var(--cyan); }
+.card.yl .kv .k { color: var(--yellow); }
+.kv .v { color: var(--text); }
+
+.foot { max-width: 1280px; margin: 4px auto 8px; padding: 6px 18px; border-top: 1px solid var(--border2); display: flex; justify-content: space-between; font-size: 8px; letter-spacing: 1px; color: var(--dim); flex-wrap: wrap; gap: 6px; }
+.foot a { color: var(--orange); text-decoration: none; }
+
+@media (max-width: 980px) { .sheet { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .sheet { grid-template-columns: 1fr; } .head { flex-direction: column; align-items: flex-start; } }
+@media print { body { background: #fff; } .card { break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <h1>Linux <em>Name</em>spaces // Cheatsheet</h1>
+    <div class="sub"><span>kernel 4.6+</span> &middot; util-linux &middot; iproute2 &middot; cgroups v2</div>
+  </div>
+  <div class="meta">
+    <a href="./">deep dive</a> &middot;
+    <a href="whitepaper.html">whitepaper</a> &middot;
+    <a href="https://github.com/hed0rah/namespaces-fun">github.com/hed0rah/namespaces-fun</a>
+  </div>
+</div>
+
+<div class="sheet">
+
+<div class="card">
+  <h2>The <em>Eight</em> Types</h2>
+  <div class="sub">CLONE flag &middot; unshare flag &middot; since</div>
+  <table>
+    <thead><tr><th>type</th><th>CLONE_NEW*</th><th>-X</th><th>kernel</th></tr></thead>
+    <tbody>
+      <tr><td class="k">mnt</td><td>NS</td><td class="f">-m</td><td>2.4.19</td></tr>
+      <tr><td class="k">uts</td><td>UTS</td><td class="f">-u</td><td>2.6.19</td></tr>
+      <tr><td class="k">ipc</td><td>IPC</td><td class="f">-i</td><td>2.6.19</td></tr>
+      <tr><td class="k">pid</td><td>PID</td><td class="f">-p</td><td>2.6.24</td></tr>
+      <tr><td class="k">net</td><td>NET</td><td class="f">-n</td><td>2.6.29</td></tr>
+      <tr><td class="k">user</td><td>USER</td><td class="f">-U</td><td>3.8</td></tr>
+      <tr><td class="k">cgroup</td><td>CGROUP</td><td class="f">-C</td><td>4.6</td></tr>
+      <tr><td class="k">time</td><td>TIME</td><td class="f">-T</td><td>5.6</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:9px;color:var(--dim)">all eight + cgroups + image = container</p>
+</div>
+
+<div class="card cy">
+  <h2>Three <em>Syscalls</em></h2>
+  <div class="sub">how userspace touches namespaces</div>
+  <div class="kv">
+    <span class="k">clone</span><span class="v">fork into new ns. runc, crun.</span>
+    <span class="k">unshare</span><span class="v">move self into new ns. unshare(1).</span>
+    <span class="k">setns</span><span class="v">join existing ns by fd. nsenter(1).</span>
+  </div>
+  <pre class="cy"><span class="cm"># inspect via /proc</span>
+<span class="kw">$</span> ls /proc/$$/ns/
+cgroup ipc mnt net pid pid_for_children
+time time_for_children user uts
+
+<span class="kw">$</span> readlink /proc/$$/ns/pid
+<span class="key">pid:[<span class="num">4026531836</span>]</span>
+<span class="cm"># equal inode = same namespace</span></pre>
+</div>
+
+<div class="card yl">
+  <h2>unshare // <em>create</em></h2>
+  <div class="sub">make new ns and exec a program</div>
+  <pre class="yl"><span class="cm"># UTS only - change hostname</span>
+<span class="kw">$</span> sudo unshare --uts bash
+
+<span class="cm"># PID ns needs --fork (and --mount-proc)</span>
+<span class="kw">$</span> sudo unshare --pid --fork --mount-proc bash
+
+<span class="cm"># blank network stack (only lo, DOWN)</span>
+<span class="kw">$</span> sudo unshare --net bash
+
+<span class="cm"># the works - basically a container</span>
+<span class="kw">$</span> sudo unshare --pid --uts --mount --ipc \
+       --net --cgroup --fork bash
+
+<span class="cm"># rootless: user ns first, no sudo</span>
+<span class="kw">$</span> unshare --user --map-root-user bash</pre>
+</div>
+
+<div class="card">
+  <h2>nsenter // <em>join</em></h2>
+  <div class="sub">enter an existing namespace</div>
+  <pre><span class="cm"># every namespace of PID 12345</span>
+<span class="kw">$</span> sudo nsenter --target 12345 --all bash
+
+<span class="cm"># just the network ns (great for tcpdump)</span>
+<span class="kw">$</span> sudo nsenter --target 12345 --net bash
+
+<span class="cm"># a docker container without docker exec</span>
+<span class="kw">$</span> PID=$(docker inspect -f \
+       <span class="str">'{{.State.Pid}}'</span> mybox)
+<span class="kw">$</span> sudo nsenter --target $PID --all bash
+
+<span class="cm"># works even if dockerd is wedged</span></pre>
+</div>
+
+<div class="card cy">
+  <h2>ip netns // <em>persist</em></h2>
+  <div class="sub">named network namespaces</div>
+  <pre class="cy"><span class="kw">$</span> ip netns add myns
+<span class="kw">$</span> ip netns list
+<span class="kw">$</span> ip netns exec myns bash
+<span class="kw">$</span> ip netns del myns
+
+<span class="cm"># veth pair: virtual cable</span>
+<span class="kw">$</span> ip link add v0 type veth peer name v1
+<span class="kw">$</span> ip link set v1 netns myns
+<span class="kw">$</span> ip addr add 10.0.0.1/24 dev v0
+<span class="kw">$</span> ip link set v0 up
+<span class="kw">$</span> ip netns exec myns ip addr add \
+       10.0.0.2/24 dev v1
+<span class="kw">$</span> ip netns exec myns ip link set v1 up</pre>
+</div>
+
+<div class="card rd">
+  <h2>nsm CLI // <em>this</em> repo</h2>
+  <div class="sub">/usr/local/bin/nsm after install</div>
+  <pre class="rd"><span class="kw">$</span> nsm list                 <span class="cm"># all ns on host</span>
+<span class="kw">$</span> nsm tree                 <span class="cm"># by type</span>
+<span class="kw">$</span> nsm inspect $(pidof nginx)
+<span class="kw">$</span> nsm diff 1 $$            <span class="cm"># vs init</span>
+<span class="kw">$</span> nsm ps --ns-type net     <span class="cm"># grouped</span>
+<span class="kw">$</span> nsm monitor              <span class="cm"># live events</span>
+
+<span class="cm"># named ns (under /run/nsm/)</span>
+<span class="kw">$</span> sudo nsm create mybox --type net
+<span class="kw">$</span> sudo nsm enter mybox
+<span class="kw">$</span> sudo nsm exec mybox -- ip addr
+<span class="kw">$</span> sudo nsm destroy mybox</pre>
+</div>
+
+<div class="card yl">
+  <h2>/proc // <em>everything</em></h2>
+  <div class="sub">where namespaces show up</div>
+  <div class="kv">
+    <span class="k">/proc/PID/ns/</span><span class="v">8 magic symlinks per process</span>
+    <span class="k">/proc/PID/status</span><span class="v">NSpid: in-ns then host PID</span>
+    <span class="k">/proc/PID/uid_map</span><span class="v">user ns mapping</span>
+    <span class="k">/proc/PID/cgroup</span><span class="v">cgroup path (virtualised by cgroup ns)</span>
+    <span class="k">/var/run/netns/</span><span class="v">ip netns bind-mount targets</span>
+    <span class="k">/run/nsm/&lt;n&gt;/</span><span class="v">nsm-managed ns metadata</span>
+  </div>
+  <pre class="yl"><span class="cm"># two PIDs for one process in a new pid ns</span>
+<span class="kw">$</span> grep NSpid /proc/12345/status
+<span class="out">NSpid:    12345    1</span></pre>
+</div>
+
+<div class="card">
+  <h2>Inspection // <em>lsns</em></h2>
+  <div class="sub">discover namespaces system-wide</div>
+  <pre><span class="kw">$</span> sudo lsns                       <span class="cm"># all</span>
+<span class="kw">$</span> sudo lsns -t net                <span class="cm"># filter</span>
+<span class="kw">$</span> sudo lsns -t pid -o NS,PID,COMMAND
+
+<span class="cm"># find isolated processes (likely containers)</span>
+<span class="kw">$</span> for d in /proc/[0-9]*/; do
+    p=$(basename $d)
+    [ "$(readlink $d/ns/pid 2&gt;/dev/null)" \
+      != "$(readlink /proc/1/ns/pid)" ] \
+      &amp;&amp; echo "$p in non-init pid ns"
+  done</pre>
+</div>
+
+<div class="card gn">
+  <h2>Container // <em>from scratch</em></h2>
+  <div class="sub">demos/07-mini-container.sh</div>
+  <ul class="bul">
+    <li><strong>1.</strong> rootfs (debootstrap, busybox)</li>
+    <li><strong>2.</strong> cgroup + limits (memory.max, pids.max)</li>
+    <li><strong>3.</strong> unshare all 8 types + --fork</li>
+    <li><strong>4.</strong> mount --make-rprivate /</li>
+    <li><strong>5.</strong> mount --bind ROOTFS ROOTFS</li>
+    <li><strong>6.</strong> mount /proc /sys /dev inside</li>
+    <li><strong>7.</strong> pivot_root . .old_root, exec /bin/sh</li>
+  </ul>
+  <p style="font-size:9px;margin-top:4px"><strong>Production also:</strong> drop caps, seccomp, apparmor/selinux, CNI for net.</p>
+</div>
+
+<div class="card">
+  <h2>Pitfalls // <em>gotchas</em></h2>
+  <div class="sub">ways to make namespaces hurt</div>
+  <ul class="bul">
+    <li><strong>PID 1 dies</strong> kernel SIGKILLs everything in the ns. Use tini or --init.</li>
+    <li><strong>--fork required</strong> for PID ns; without it your $$ is unchanged.</li>
+    <li><strong>Mount propagation</strong> defaults can leak host-ward. <code>mount --make-rprivate /</code> first.</li>
+    <li><strong>pivot_root</strong> needs new_root to be a mount point. Bind-mount onto self.</li>
+    <li><strong>userns + chown</strong> across the boundary depends on uid_map ranges.</li>
+    <li><strong>Ubuntu 24.04+</strong> AppArmor blocks unprivileged userns. Sysctl: <code>kernel.apparmor_restrict_unprivileged_userns=0</code>.</li>
+    <li><strong>Time ns</strong> covers monotonic only; wall clock is global.</li>
+  </ul>
+</div>
+
+<div class="card cy">
+  <h2>Recipes // <em>copy-paste</em></h2>
+  <div class="sub">things you actually do</div>
+  <pre class="cy"><span class="cm"># enter a docker container's network</span>
+<span class="kw">$</span> P=$(docker inspect -f <span class="str">'{{.State.Pid}}'</span> X)
+<span class="kw">$</span> sudo nsenter --target $P --net bash
+
+<span class="cm"># NAT a netns to the world</span>
+<span class="kw">$</span> sysctl -w net.ipv4.ip_forward=1
+<span class="kw">$</span> iptables -t nat -A POSTROUTING \
+    -s 10.0.0.0/24 -j MASQUERADE
+<span class="kw">$</span> ip netns exec myns ip route add \
+    default via 10.0.0.1
+
+<span class="cm"># cgroup v2 limits (no namespace involved)</span>
+<span class="kw">$</span> sudo mkdir /sys/fs/cgroup/mybox
+<span class="kw">$</span> echo <span class="num">67108864</span> | sudo tee \
+    /sys/fs/cgroup/mybox/memory.max
+<span class="kw">$</span> echo $$ | sudo tee \
+    /sys/fs/cgroup/mybox/cgroup.procs</pre>
+</div>
+
+<div class="card rd">
+  <h2>Find &amp; Debug // <em>compare</em></h2>
+  <div class="sub">when something is in the wrong ns</div>
+  <pre class="rd"><span class="cm"># is this process isolated from init?</span>
+<span class="kw">$</span> for ns in /proc/$PID/ns/*; do
+    t=$(basename $ns)
+    a=$(readlink $ns)
+    b=$(readlink /proc/1/ns/$t)
+    [ "$a" != "$b" ] &amp;&amp; echo "ISOL: $t"
+  done
+
+<span class="cm"># shorthand via nsm</span>
+<span class="kw">$</span> nsm diff 1 $PID
+
+<span class="cm"># watch for short-lived ns (runtimes spawn them)</span>
+<span class="kw">$</span> sudo nsm monitor</pre>
+</div>
+
+</div>
+
+<div class="foot">
+  <span>NAMESPACES-FUN // CHEATSHEET // <a href="./">deep dive</a> &middot; <a href="whitepaper.html">whitepaper</a></span>
+  <span><a href="https://github.com/hed0rah/namespaces-fun">github.com/hed0rah/namespaces-fun</a></span>
+</div>
+
+</body>
+</html>
