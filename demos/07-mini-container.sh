@@ -19,13 +19,13 @@ CONTAINER_HOSTNAME="tiny-container"
 
 cat <<'BANNER'
 
-  _   _             _
- | |_(_)_ _ _  _   | |__  _____ __
- |  _| | ' \ || |  | '_ \/ _ \ \ /
-  \__|_|_||_\_, |  |_.__/\___/_\_\
-            |__/
+  _          _  ___       _
+ | |_  ___ _| |/ _ \ ___| | _____ _ __
+ | ' \/ -_) _` | | | / __| |/ / -_) '__|
+ | |_| \___\__,_|___|_\__|_|\_\___|_|
+
 BANNER
-echo -e "${BOLD}${CYAN}  tinybox${RESET} ${YELLOW}- building a container from scratch with just bash + unshare${RESET}"
+echo -e "${BOLD}${CYAN}  hed0cker${RESET} ${YELLOW}- building a container from scratch with just bash + unshare${RESET}"
 echo ""
 
 # --- Step 0: Build or verify rootfs ---
