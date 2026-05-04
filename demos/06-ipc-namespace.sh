@@ -52,6 +52,14 @@ unshare --ipc -- bash -c '
     NS_QUEUE=$(ipcmk -Q | grep -oP "id: \K\d+")
     echo -e "\033[0;32m  [inside]  Created queue ID: ${NS_QUEUE}\033[0m"
     ipcs -q | sed "s/^/    /"
+    echo ""
+    echo -e "\033[0;36m  [inside]  Holding namespace open for 60s. Holder PID: $$\033[0m"
+    echo -e "\033[0;36m  [inside]  From another terminal try:\033[0m"
+    echo -e "\033[0;32m      sudo ipcs -q                                 # host view: only queue '"$QUEUE_ID"'\033[0m"
+    echo -e "\033[0;32m      sudo nsenter --target $$ --ipc ipcs -q       # ns view: only queue ${NS_QUEUE}\033[0m"
+    echo -e "\033[0;32m      sudo lsns -t ipc | tail -5\033[0m"
+    echo -e "\033[0;36m  Press Ctrl+C to clean up early.\033[0m"
+    sleep 60
     # queue disappears when namespace exits
 '
 

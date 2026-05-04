@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>namespaces-fun // Linux Namespaces</title>
+<meta name="description" content="Demo scripts, the nsm CLI, a deep-dive HTML, and a whitepaper reference on Linux kernel namespaces.">
+<meta property="og:title" content="namespaces-fun"><meta property="og:type" content="website">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&display=swap');
+:root {
+  --bg:#F2F1EE; --surface:#FFFFFF; --border:#1A1A1A; --border2:#D0CFC8;
+  --orange:#E85000; --cyan:#007870; --yellow:#906500;
+  --dim:#8A8A8A; --dim2:#AAAAAA; --text:#4A4A4A; --bright:#0D0D0D;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: var(--bg); color: var(--text); font-family: 'Space Mono', monospace; font-size: 12px; line-height: 1.7; }
+.masthead { border-top: 5px solid var(--orange); padding: 60px 40px 36px; text-align: center; border-bottom: 1px solid var(--border); background: var(--surface); }
+.masthead h1 { font-family: 'Bebas Neue', sans-serif; font-size: clamp(2.6rem, 7vw, 4.8rem); letter-spacing: 6px; color: var(--bright); line-height: 1; margin-bottom: 8px; }
+.masthead h1 em { color: var(--orange); font-style: normal; }
+.masthead .subtitle { font-size: 11px; color: var(--dim); letter-spacing: 3px; text-transform: uppercase; }
+.masthead .subtitle span { color: var(--cyan); }
+.masthead .repo-line { margin-top: 18px; font-size: 10px; letter-spacing: 2px; }
+.masthead .repo-line a { color: var(--orange); text-decoration: none; border-bottom: 1px dotted var(--orange); padding: 0 2px; }
+.masthead .repo-line a:hover { background: var(--orange); color: var(--surface); border-bottom-color: var(--orange); }
+
+.container { max-width: 980px; margin: 0 auto; padding: 0 28px; border-inline: 1px solid var(--border); background: var(--bg); }
+section { padding: 44px 0; border-bottom: 1px solid var(--border2); counter-increment: section; }
+section:last-of-type { border-bottom: none; }
+.container { counter-reset: section; }
+section::before { content: counter(section, decimal-leading-zero) ' //'; display: block; font-family: 'Space Mono', monospace; font-size: 9px; color: var(--dim2); letter-spacing: 3px; margin-bottom: 6px; }
+
+h2 { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px; color: var(--bright); margin-bottom: 6px; line-height: 1; }
+h2 em { font-style: normal; color: var(--orange); }
+.section-bar { width: 32px; height: 3px; margin-bottom: 16px; background: var(--orange); }
+p { font-size: 12px; color: var(--text); margin: 8px 0; line-height: 1.7; max-width: 76ch; }
+p strong { color: var(--bright); }
+code { background: var(--surface); border: 1px solid var(--border2); padding: 1px 6px; font-size: 11px; color: var(--bright); }
+
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0 4px; }
+.card { display: block; background: var(--surface); border: 1px solid var(--border2); border-left: 3px solid var(--orange); padding: 18px 22px; text-decoration: none; color: var(--text); transition: border-color 0.15s, background 0.15s; }
+.card:hover { border-left-color: var(--cyan); border-color: var(--dim2); }
+.card .card-tag { font-size: 9px; letter-spacing: 3px; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.card .card-h { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px; color: var(--orange); line-height: 1; margin-bottom: 8px; }
+.card:hover .card-h { color: var(--cyan); }
+.card .card-desc { font-size: 11px; line-height: 1.6; color: var(--text); margin-bottom: 10px; }
+.card .card-link { font-size: 10px; letter-spacing: 2px; color: var(--bright); text-transform: uppercase; }
+.card .card-link::after { content: " ->"; color: var(--orange); }
+
+.cmd-list { list-style: none; padding: 0; margin: 12px 0; font-family: 'Space Mono', monospace; font-size: 11px; }
+.cmd-list li { padding: 6px 0; border-bottom: 1px dashed var(--border2); display: flex; gap: 12px; align-items: baseline; }
+.cmd-list li:last-child { border-bottom: none; }
+.cmd-list li .pr { color: var(--orange); flex-shrink: 0; }
+.cmd-list li .cm { color: var(--bright); }
+.cmd-list li .desc { color: var(--dim); font-size: 10px; margin-left: auto; font-style: italic; padding-left: 16px; text-align: right; }
+
+.repo-list { list-style: none; padding: 0; margin: 12px 0; font-family: 'Space Mono', monospace; font-size: 11px; }
+.repo-list li { padding: 6px 0; border-bottom: 1px dashed var(--border2); display: grid; grid-template-columns: 160px 1fr; gap: 14px; align-items: baseline; }
+.repo-list li:last-child { border-bottom: none; }
+.repo-list li .key { color: var(--orange); }
+.repo-list li .val { color: var(--text); }
+
+.footer { border-top: 1px solid var(--border2); padding: 14px 28px; display: flex; justify-content: space-between; font-size: 9px; color: var(--dim); letter-spacing: 1px; max-width: 980px; margin: 12px auto 0; flex-wrap: wrap; gap: 8px; }
+.footer a { color: var(--orange); text-decoration: none; }
+
+@media (max-width: 680px) { .cards { grid-template-columns: 1fr; } .cmd-list li .desc { display: none; } .repo-list li { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <h1>name<em>spaces</em>-fun</h1>
+  <div class="subtitle"><span>Linux kernel namespaces by example</span></div>
+  <div class="repo-line"><a href="https://github.com/hed0rah/namespaces-fun">github.com/hed0rah/namespaces-fun</a></div>
+</div>
+
+<div class="container">
+
+<section>
+  <h2><em>Read</em></h2>
+  <div class="section-bar"></div>
+  <p>Two HTML companions, same content, different shapes. The deep dive is a long-form tour you read top to bottom; the whitepaper is a dense reference with hover-context margin cards.</p>
+  <div class="cards">
+    <a class="card" href="namespaces.html">
+      <div class="card-tag">Deep Dive</div>
+      <div class="card-h">Under the Hood</div>
+      <div class="card-desc">Sectioned walk through the eight namespace types, the inode model, syscalls, and a from-scratch container in seven steps. Sticky nav, ASCII diagrams, code blocks.</div>
+      <div class="card-link">namespaces.html</div>
+    </a>
+    <a class="card" href="whitepaper.html">
+      <div class="card-tag">Whitepaper</div>
+      <div class="card-h">Reference Brief</div>
+      <div class="card-desc">Three-column LaTeX-style brief with margin-card hover context on every underlined term. Inline SVG diagrams. Print-friendly.</div>
+      <div class="card-link">whitepaper.html</div>
+    </a>
+  </div>
+</section>
+
+<section>
+  <h2><em>Run</em></h2>
+  <div class="section-bar"></div>
+  <p>Clone the repo and start with the demos. All scripts hold the namespace open for sixty seconds so you can poke at it from another terminal. <code>Ctrl+C</code> tears down early.</p>
+  <ul class="cmd-list">
+    <li><span class="pr">$</span><span class="cm">git clone https://github.com/hed0rah/namespaces-fun &amp;&amp; cd namespaces-fun</span><span class="desc"></span></li>
+    <li><span class="pr">$</span><span class="cm">chmod +x demos/*.sh nsm/nsm</span><span class="desc"></span></li>
+    <li><span class="pr">$</span><span class="cm">sudo ./demos/01-uts-hostname.sh</span><span class="desc">hostname isolation, gentlest intro</span></li>
+    <li><span class="pr">$</span><span class="cm">sudo ./demos/03-net-namespace.sh</span><span class="desc">veth pair, the Docker way</span></li>
+    <li><span class="pr">$</span><span class="cm">./demos/05-user-namespace.sh</span><span class="desc">no sudo, rootless containers basis</span></li>
+    <li><span class="pr">$</span><span class="cm">sudo ./demos/07-mini-container.sh</span><span class="desc">a real container in pure bash</span></li>
+    <li><span class="pr">$</span><span class="cm">sudo cp nsm/nsm /usr/local/bin/nsm</span><span class="desc">install the CLI</span></li>
+    <li><span class="pr">$</span><span class="cm">nsm list</span><span class="desc">all namespaces on the system</span></li>
+    <li><span class="pr">$</span><span class="cm">sudo nsm diff 1 $$</span><span class="desc">compare your shell to init</span></li>
+  </ul>
+</section>
+
+<section>
+  <h2>What's <em>inside</em></h2>
+  <div class="section-bar"></div>
+  <ul class="repo-list">
+    <li><span class="key">demos/</span><span class="val">nine numbered scripts, one per namespace type plus a from-scratch container</span></li>
+    <li><span class="key">nsm/</span><span class="val">CLI: list, inspect, create, enter, exec, diff, tree, destroy, ps, monitor</span></li>
+    <li><span class="key">deep-dive.md</span><span class="val">narrative walkthrough in markdown (source for namespaces.html)</span></li>
+    <li><span class="key">cheatsheet.md</span><span class="val">command reference, namespace flag table, recipes</span></li>
+    <li><span class="key">namespaces.html</span><span class="val">the deep dive, rendered</span></li>
+    <li><span class="key">whitepaper.html</span><span class="val">the reference brief, with margin cards</span></li>
+  </ul>
+</section>
+
+</div>
+
+<div class="footer">
+  <span>NAMESPACES-FUN // hosted on github pages // source: <a href="https://github.com/hed0rah/namespaces-fun">github.com/hed0rah/namespaces-fun</a></span>
+</div>
+
+</body>
+</html>

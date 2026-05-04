@@ -29,8 +29,19 @@ unshare --pid --fork --mount-proc -- bash -c '
     echo -e "\033[0;36m  [inside]  Processes visible from inside:\033[0m"
     ps aux
     echo ""
-    echo -e "\033[0;36m  [inside]  Only processes in THIS namespace are visible.${RESET}\033[0m"
-    echo -e "\033[0;36m  [inside]  The host has hundreds of processes we cannot see.${RESET}\033[0m"
+    echo -e "\033[0;36m  [inside]  Only processes in THIS namespace are visible.\033[0m"
+    echo -e "\033[0;36m  [inside]  The host has hundreds of processes we cannot see.\033[0m"
+    echo ""
+    # In a new PID ns, $$ is the in-ns PID (likely 1). The host sees us at a different PID.
+    # NSpid lists PIDs innermost-first, so the last column is the host PID.
+    HOST_PID=$(awk "/^NSpid:/{print \$NF}" /proc/self/status)
+    echo -e "\033[0;36m  [inside]  Holding namespace open for 60s. In-ns PID: $$ / Host PID: ${HOST_PID}\033[0m"
+    echo -e "\033[0;36m  [inside]  From another terminal try:\033[0m"
+    echo -e "\033[0;32m      sudo nsenter --target ${HOST_PID} --pid --mount ps aux\033[0m"
+    echo -e "\033[0;32m      sudo grep NSpid /proc/${HOST_PID}/status     # both PIDs side by side\033[0m"
+    echo -e "\033[0;32m      sudo lsns -t pid                              # see the new pid namespace\033[0m"
+    echo -e "\033[0;36m  Press Ctrl+C to clean up early.\033[0m"
+    sleep 60
 '
 
 echo ""

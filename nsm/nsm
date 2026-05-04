@@ -36,8 +36,8 @@ warn() { echo -e "${YELLOW}[nsm]${RESET} $*"; }
 need_root() { [[ $EUID -eq 0 ]] || die "This command requires root. Use sudo."; }
 
 usage() {
-    cat <<'EOF'
-nsm - Namespace Manager v%VERSION%
+    cat <<EOF
+nsm - Namespace Manager v$VERSION
 
 Usage: nsm <command> [options]
 
@@ -117,10 +117,18 @@ cmd_list() {
 cmd_inspect() {
     local target="${1:?Usage: nsm inspect <pid|name>}"
 
-    # If it's a name, look up the pid
-    if [[ -f "$NSM_DIR/$target/pid" ]]; then
-        target=$(cat "$NSM_DIR/$target/pid")
-        info "Resolved to PID $target"
+    # If it's a managed name, resolve to the holder pid (or netns owner)
+    if [[ -d "$NSM_DIR/$target" ]]; then
+        if [[ -f "$NSM_DIR/$target/pid" ]]; then
+            target=$(cat "$NSM_DIR/$target/pid")
+            info "Resolved to PID $target"
+        elif [[ -f "$NSM_DIR/$target/method" ]] && [[ "$(cat "$NSM_DIR/$target/method")" == "ip-netns" ]]; then
+            # ip netns has no holder process; pick first pid inside if any
+            local nsname="$target"
+            target=$(ip netns pids "$nsname" 2>/dev/null | head -1)
+            [[ -n "$target" ]] || die "Network namespace '$nsname' has no processes to inspect."
+            info "Resolved netns '$nsname' to PID $target"
+        fi
     fi
 
     # Validate PID
@@ -132,17 +140,25 @@ cmd_inspect() {
     echo -e "${BOLD}Namespaces for PID $target${RESET} ($cmdline)"
     echo ""
 
+    local can_read_init=1
+    [[ -r "/proc/1/ns" ]] || can_read_init=0
+
     printf "  %-12s %-30s %s\n" "TYPE" "NAMESPACE" "SAME AS INIT?"
     printf "  %-12s %-30s %s\n" "----" "---------" "-------------"
 
+    local ns ns_type target_ns init_ns same
     for ns in /proc/$target/ns/*; do
         ns_type=$(basename "$ns")
         target_ns=$(readlink "$ns" 2>/dev/null || echo "?")
-        init_ns=$(readlink "/proc/1/ns/$ns_type" 2>/dev/null || echo "?")
-        if [[ "$target_ns" == "$init_ns" ]]; then
-            same="${DIM}yes (host)${RESET}"
+        if [[ "$can_read_init" -eq 0 ]]; then
+            same="${DIM}? (need root to read /proc/1/ns)${RESET}"
         else
-            same="${GREEN}NO (isolated)${RESET}"
+            init_ns=$(readlink "/proc/1/ns/$ns_type" 2>/dev/null || echo "?")
+            if [[ "$target_ns" == "$init_ns" ]]; then
+                same="${DIM}yes (host)${RESET}"
+            else
+                same="${GREEN}NO (isolated)${RESET}"
+            fi
         fi
         printf "  %-12s %-30s %b\n" "$ns_type" "$target_ns" "$same"
     done
@@ -176,15 +192,23 @@ cmd_create() {
         esac
     done
 
-    mkdir -p "$NSM_DIR/$name"
-    [[ ! -f "$NSM_DIR/$name/pid" ]] || {
-        local old_pid
-        old_pid=$(cat "$NSM_DIR/$name/pid")
-        if kill -0 "$old_pid" 2>/dev/null; then
-            die "Namespace '$name' already exists (PID $old_pid). Destroy it first."
+    # Dup-check before any state mutation
+    if [[ -d "$NSM_DIR/$name" ]]; then
+        if [[ -f "$NSM_DIR/$name/method" ]] && [[ "$(cat "$NSM_DIR/$name/method")" == "ip-netns" ]]; then
+            if ip netns list 2>/dev/null | awk '{print $1}' | grep -qx "$name"; then
+                die "Network namespace '$name' already exists. Destroy it first."
+            fi
+            warn "Stale netns metadata for '$name'. Recreating."
+        elif [[ -f "$NSM_DIR/$name/pid" ]]; then
+            local old_pid
+            old_pid=$(cat "$NSM_DIR/$name/pid")
+            if kill -0 "$old_pid" 2>/dev/null; then
+                die "Namespace '$name' already exists (PID $old_pid). Destroy it first."
+            fi
+            warn "Stale namespace '$name' (PID $old_pid dead). Recreating."
         fi
-        warn "Stale namespace '$name' (PID $old_pid dead). Recreating."
-    }
+    fi
+    mkdir -p "$NSM_DIR/$name"
 
     # Build unshare flags
     local flags=""
@@ -299,6 +323,8 @@ cmd_diff() {
 
     [[ -d "/proc/$pid1" ]] || die "No such process: $pid1"
     [[ -d "/proc/$pid2" ]] || die "No such process: $pid2"
+    [[ -r "/proc/$pid1/ns" ]] || die "Cannot read /proc/$pid1/ns (try sudo)."
+    [[ -r "/proc/$pid2/ns" ]] || die "Cannot read /proc/$pid2/ns (try sudo)."
 
     local cmd1 cmd2
     cmd1=$(tr '\0' ' ' < "/proc/$pid1/cmdline" 2>/dev/null | head -c 40)
@@ -313,6 +339,7 @@ cmd_diff() {
     printf "  %-12s %-8s %-30s %s\n" "----" "-------" "--------" "--------"
 
     local shared=0 different=0
+    local ns ns_type ns1 ns2 status
     for ns in /proc/$pid1/ns/*; do
         ns_type=$(basename "$ns")
         ns1=$(readlink "$ns" 2>/dev/null || echo "?")
@@ -344,7 +371,7 @@ cmd_tree() {
         echo ""
         for ns_type in cgroup ipc mnt net pid user uts; do
             count=$(lsns -t "$ns_type" 2>/dev/null | tail -n +2 | wc -l)
-            bar=$(printf '%*s' "$count" '' | tr ' ' '█')
+            bar=$(printf '%.s#' $(seq 1 "$count" 2>/dev/null))
             printf "  %-8s %3d %s\n" "$ns_type" "$count" "$bar"
         done
     else
@@ -364,7 +391,7 @@ cmd_tree() {
             for key in "${!ns_counts[@]}"; do
                 [[ "$key" == "${ns_type}:"* ]] && count=$((count + 1))
             done
-            bar=$(printf '%*s' "$count" '' | tr ' ' '█')
+            bar=$(printf '%.s#' $(seq 1 "$count" 2>/dev/null))
             printf "  %-8s %3d %s\n" "$ns_type" "$count" "$bar"
         done
     fi
@@ -390,8 +417,14 @@ cmd_destroy() {
         pid=$(cat "$pid_file")
         if kill -0 "$pid" 2>/dev/null; then
             info "Killing holder process (PID $pid)..."
-            kill "$pid" 2>/dev/null
-            wait "$pid" 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
+            # Poll for exit (not our child, so wait would no-op)
+            local i
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+                kill -0 "$pid" 2>/dev/null || break
+                sleep 0.1
+            done
+            kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
         fi
     fi
 
@@ -400,8 +433,14 @@ cmd_destroy() {
 }
 
 cmd_ps() {
-    local filter_type="${1:-pid}"
-    [[ "$1" == "--ns-type" ]] && filter_type="${2:-pid}"
+    local filter_type="pid"
+    if [[ $# -ge 1 ]]; then
+        if [[ "$1" == "--ns-type" ]]; then
+            filter_type="${2:-pid}"
+        else
+            filter_type="$1"
+        fi
+    fi
 
     echo -e "${BOLD}Processes grouped by ${filter_type} namespace:${RESET}"
     echo ""

@@ -66,9 +66,12 @@ echo -e "    Let's create a namespace and then enter it from outside."
 echo ""
 
 # Create a long-lived process in a new UTS namespace
-unshare --uts -- bash -c 'hostname sneaky-namespace; sleep 30' &
+unshare --uts -- bash -c 'hostname sneaky-namespace; sleep 60' &
 CHILD_PID=$!
 sleep 0.5
+
+# Make sure we clean it up no matter how the script exits
+trap "kill $CHILD_PID 2>/dev/null; wait $CHILD_PID 2>/dev/null || true" EXIT
 
 echo -e "    Created process ${GREEN}${CHILD_PID}${RESET} in its own UTS namespace"
 echo -e "    Its hostname: $(nsenter --target $CHILD_PID --uts hostname)"
@@ -80,7 +83,12 @@ echo -e "    $ nsenter --target $CHILD_PID --uts -- hostname"
 echo -e "    $(nsenter --target $CHILD_PID --uts -- hostname)"
 echo ""
 
-kill $CHILD_PID 2>/dev/null; wait $CHILD_PID 2>/dev/null || true
+echo -e "${CYAN}[*] Holding the sneaky namespace open for 60s (PID ${CHILD_PID}).${RESET}"
+echo -e "    From another terminal try:"
+echo -e "      ${GREEN}sudo nsenter --target ${CHILD_PID} --uts bash${RESET}    # drop into a shell with that hostname"
+echo -e "      ${GREEN}sudo lsns -t uts | grep sneaky${RESET}                 # find it in the global list"
+echo -e "    Press Ctrl+C to clean up early."
+wait $CHILD_PID 2>/dev/null || true
 
 # --- /proc/pid/ns is the window into everything ---
 echo -e "${YELLOW}=== Key tools ===${RESET}"

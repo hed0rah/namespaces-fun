@@ -27,11 +27,11 @@ unshare --uts -- bash -c '
     echo -e "\033[0;32m  [inside]  hostname = $(hostname)\033[0m"
     echo -e "\033[0;32m  [inside]  /proc/sys/kernel/hostname = $(cat /proc/sys/kernel/hostname)\033[0m"
     echo ""
-    echo -e "\033[0;36m  [inside]  Sleeping 2s so you can poke around from another terminal...\033[0m"
+    echo -e "\033[0;36m  [inside]  Sleeping 60s so you can poke around from another terminal...\033[0m"
     echo -e "\033[0;36m  [inside]  Try: sudo ls -la /proc/$$/ns/uts\033[0m"
-    sleep 2
+    sleep 60
 '
 
 echo ""
 echo -e "Host hostname after: ${GREEN}$(hostname)${RESET}"
-echo -e "${CYAN}[*] See? The host hostname was never touched.${RESET}"
+echo -e "${CYAN}[*] The host hostname was never touched.${RESET}"

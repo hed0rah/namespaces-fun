@@ -38,16 +38,32 @@ fi
 CGROUP_PATH="/sys/fs/cgroup/${CGROUP_NAME}"
 
 cleanup() {
-    # Kill any remaining processes in the cgroup
-    if [[ -f "${CGROUP_PATH}/cgroup.procs" ]]; then
+    # Move ourselves out of the demo cgroup before tearing it down.
+    echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null || true
+    # Try TERM first, then KILL, polling cgroup.procs until empty (or 5 rounds).
+    local round pid
+    for round in 1 2 3 4 5; do
+        [[ -f "${CGROUP_PATH}/cgroup.procs" ]] || break
+        [[ -s "${CGROUP_PATH}/cgroup.procs" ]] || break
         while read -r pid; do
+            [[ -z "$pid" || "$pid" == "$$" ]] && continue
             kill "$pid" 2>/dev/null || true
         done < "${CGROUP_PATH}/cgroup.procs"
-        sleep 0.2
+        sleep 0.3
+    done
+    if [[ -s "${CGROUP_PATH}/cgroup.procs" ]] 2>/dev/null; then
+        while read -r pid; do
+            [[ -z "$pid" || "$pid" == "$$" ]] && continue
+            kill -9 "$pid" 2>/dev/null || true
+        done < "${CGROUP_PATH}/cgroup.procs"
+        sleep 0.3
     fi
     rmdir "$CGROUP_PATH" 2>/dev/null || true
 }
+# Catch all the ways this can end: normal exit, Ctrl+C, SIGTERM from timeout(1).
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # --- Create a cgroup with limits ---
 echo -e "${CYAN}[1] Creating cgroup '${CGROUP_NAME}' with resource limits...${RESET}"
@@ -88,15 +104,23 @@ bash -c "
         echo -e \"\033[0;32m  [inside]  The container thinks it is at the root of the cgroup tree.\033[0m\"
         echo \"\"
 
-        echo -e \"\033[0;36m  [inside]  Trying to fork-bomb (limited to 20 pids)...\033[0m\"
-        count=0
+        echo -e \"\033[0;36m  [inside]  Trying to spawn 25 procs into a cgroup capped at 20 pids...\033[0m\"
+        # & always returns 0 for the foreground shell, so we count the ACTUAL
+        # successful forks by re-reading cgroup.procs.
         for i in \$(seq 1 25); do
-            sleep 60 &
-            if [[ \$? -eq 0 ]]; then
-                count=\$((count + 1))
-            fi
+            sleep 30 & 2>/dev/null
         done 2>/dev/null
-        echo -e \"\033[0;32m  [inside]  Managed to create \${count} background procs before hitting the limit\033[0m\"
+        actual=\$(wc -l < ${CGROUP_PATH}/cgroup.procs)
+        echo -e \"\033[0;32m  [inside]  Processes alive in this cgroup: \${actual} (cap: 20)\033[0m\"
+        echo \"\"
+        echo -e \"\033[0;36m  [inside]  Holding for 60s. From another terminal try:\033[0m\"
+        echo -e \"\033[0;32m      cat ${CGROUP_PATH}/cgroup.procs        # see member PIDs\033[0m\"
+        echo -e \"\033[0;32m      cat ${CGROUP_PATH}/pids.current        # current count\033[0m\"
+        echo -e \"\033[0;32m      cat ${CGROUP_PATH}/pids.max            # the limit (20)\033[0m\"
+        echo -e \"\033[0;32m      cat ${CGROUP_PATH}/memory.current      # bytes in use\033[0m\"
+        echo -e \"\033[0;32m      sudo nsenter --target \$\$ --cgroup cat /proc/self/cgroup\033[0m\"
+        echo -e \"\033[0;36m  Press Ctrl+C to clean up early.\033[0m\"
+        sleep 60
         kill \$(jobs -p) 2>/dev/null
         wait 2>/dev/null
     '

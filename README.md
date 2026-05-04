@@ -2,11 +2,13 @@
 
 Scripts and tools for working with Linux namespaces - the kernel primitives behind containers.
 
+Hosted version: https://hed0rah.github.io/namespaces-fun/
+
 ## What's Here
 
 ```
 demos/
-├── 01-uts-hostname.sh      UTS namespace - hostname isolation
+├── 01-uts-hostname.sh       UTS namespace - hostname isolation
 ├── 02-pid-namespace.sh      PID namespace - invisible processes
 ├── 03-net-namespace.sh      Network namespace - veth pairs, the Docker way
 ├── 04-mount-namespace.sh    Mount namespace - filesystem illusions
@@ -21,7 +23,10 @@ nsm/
 └── nsm-completions.bash     Bash tab completions
 
 cheatsheet.md                Quick reference for namespace commands
-deep-dive.md                 Namespaces from zero to container
+deep-dive.md                 Namespaces from zero to container (markdown)
+whitepaper.html              Reference brief in LaTeX-paper style
+namespaces.html              Interactive HTML tour
+index.html                   Landing page (GitHub Pages root)
 ```
 
 ## Usage

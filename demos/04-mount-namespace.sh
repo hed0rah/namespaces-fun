@@ -47,6 +47,14 @@ unshare --mount -- bash -c '
 
     echo -e "\033[0;36m  [inside]  Mount table (filtered):\033[0m"
     mount | grep ns-demo | sed "s/^/    /"
+    echo ""
+    echo -e "\033[0;36m  [inside]  Holding namespace open for 60s. Holder PID: $$\033[0m"
+    echo -e "\033[0;36m  [inside]  From another terminal try:\033[0m"
+    echo -e "\033[0;32m      sudo nsenter --target $$ --mount ls -la '"${SECRET_DIR}"'\033[0m"
+    echo -e "\033[0;32m      sudo nsenter --target $$ --mount cat '"${SECRET_DIR}"'/namespace-only.txt\033[0m"
+    echo -e "\033[0;32m      ls -la '"${SECRET_DIR}"'                    # host view (different!)\033[0m"
+    echo -e "\033[0;36m  Press Ctrl+C to clean up early.\033[0m"
+    sleep 60
 '
 
 echo ""

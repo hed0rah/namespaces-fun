@@ -16,12 +16,37 @@ echo -e "${CYAN}=== User Namespace ===${RESET}"
 echo -e "Outside: uid=$(id -u) gid=$(id -g) user=$(whoami)"
 echo ""
 
-# Check if user namespaces are allowed
+# Check if user namespaces are allowed at the kernel level (Debian-style toggle)
 if [[ -f /proc/sys/kernel/unprivileged_userns_clone ]] && \
    [[ "$(cat /proc/sys/kernel/unprivileged_userns_clone)" == "0" ]]; then
     echo -e "${RED}[!] Unprivileged user namespaces are disabled on this kernel.${RESET}"
     echo -e "${RED}    Enable with: sudo sysctl kernel.unprivileged_userns_clone=1${RESET}"
     exit 1
+fi
+
+# Ubuntu 24.04+ adds an AppArmor restriction on top: even with the kernel
+# toggle on, /usr/bin/unshare gets confined to a profile that lacks
+# CAP_SYS_ADMIN, so writing uid_map fails with EPERM.
+if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]] && \
+   [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" == "1" ]]; then
+    echo -e "${YELLOW}[!] AppArmor is restricting unprivileged user namespaces.${RESET}"
+    echo -e "${YELLOW}    (Ubuntu 24.04+ default. The kernel allows it; AppArmor doesnt.)${RESET}"
+    echo ""
+    echo -e "    The demo will likely fail with:"
+    echo -e "      ${RED}unshare: write failed /proc/self/uid_map: Operation not permitted${RESET}"
+    echo ""
+    echo -e "    Quick toggle (this boot only):"
+    echo -e "      ${GREEN}sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0${RESET}"
+    echo -e "    Persistent:"
+    echo -e "      ${GREEN}echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/60-userns.conf${RESET}"
+    echo -e "    Re-enable later with: ${GREEN}sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1${RESET}"
+    echo ""
+    echo -e "    Why this exists: the bigger attack surface of unprivileged userns"
+    echo -e "    has been the source of multiple CVEs. Distros like podman ship their"
+    echo -e "    own AppArmor profile to use it safely. We're just going around it."
+    echo ""
+    read -r -p "    Continue anyway and see the failure? [y/N] " ans
+    [[ "$ans" =~ ^[Yy]$ ]] || exit 0
 fi
 
 echo -e "${CYAN}[*] Entering user namespace, mapping ourselves to root...${RESET}"
@@ -55,6 +80,16 @@ unshare --user --map-root-user -- bash -c '
     ls -la "$TMPF" | sed "s/^/    /"
     echo -e "\033[0;32m    Looks like root owns it... but only from in here.\033[0m"
     rm -f "$TMPF"
+    echo ""
+    echo -e "\033[0;36m  [inside]  Holding namespace open for 60s. Holder PID: $$\033[0m"
+    echo -e "\033[0;36m  [inside]  From another terminal try (no sudo needed for these):\033[0m"
+    echo -e "\033[0;32m      cat /proc/$$/uid_map               # the inside-to-outside map\033[0m"
+    echo -e "\033[0;32m      cat /proc/$$/gid_map\033[0m"
+    echo -e "\033[0;32m      grep Cap /proc/$$/status           # capability sets in this ns\033[0m"
+    echo -e "\033[0;32m      ls -la /proc/$$/ns/user            # the namespace inode\033[0m"
+    echo -e "\033[0;32m      ps -o pid,uid,user,cmd -p $$       # host sees the REAL user\033[0m"
+    echo -e "\033[0;36m  Press Ctrl+C to exit early.\033[0m"
+    sleep 60
 '
 
 echo ""
