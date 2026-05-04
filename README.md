@@ -24,9 +24,8 @@ nsm/
 
 cheatsheet.md                Quick reference for namespace commands
 deep-dive.md                 Namespaces from zero to container (markdown)
-whitepaper.html              Reference brief in LaTeX-paper style
-namespaces.html              Interactive HTML tour
-index.html                   Landing page (GitHub Pages root)
+index.html                   The deep dive, rendered (GitHub Pages root)
+whitepaper.html              Dense reference brief, with margin-card hover context
 ```
 
 ## Usage
